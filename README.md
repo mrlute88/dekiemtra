@@ -63,16 +63,20 @@ Mở trình duyệt tại: [http://localhost:3000](http://localhost:3000)
 
 ## 🌐 Triển Khai Lên Vercel (Deploy to Vercel)
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmrlute88%2Fdekiemtra)
+
 Dự án hoàn toàn tương thích và tối ưu hóa 100% cho Vercel Serverless:
 
-### Cách 1: Sử dụng Vercel CLI
-```bash
-npm i -g vercel
-vercel
-```
+### Cách 1: Triển khai 1-Click qua Vercel Web (Khuyên dùng)
+1. Bấm vào nút **Deploy with Vercel** ở trên hoặc truy cập liên kết:  
+   👉 **[https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmrlute88%2Fdekiemtra](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmrlute88%2Fdekiemtra)**
+2. Đăng nhập bằng tài khoản GitHub `mrlute88`.
+3. Bấm **Create** / **Deploy**. Vercel sẽ tự động build và cấp tên miền miễn phí (dạng `dekiemtra.vercel.app`) sau khoảng 1 phút!
+4. Mọi lần Thầy/Cô cập nhật code và `git push`, Vercel sẽ tự động cập nhật webapp online.
 
-### Cách 2: Kết nối qua GitHub / GitLab
-1. Đẩy mã nguồn lên kho chứa GitHub.
-2. Truy cập [vercel.com](https://vercel.com/) -> **Add New Project**.
-3. Chọn kho chứa GitHub và bấm **Deploy**.
-4. Ứng dụng hoạt động ngay lập tức mà không cần cấu hình thêm biến môi trường bắt buộc (do người dùng tự nhập API Key trên giao diện).
+### Cách 2: Sử dụng Vercel CLI từ máy tính
+```bash
+npx vercel
+```
+Làm theo hướng dẫn trên màn hình để liên kết tài khoản và deploy.
+
