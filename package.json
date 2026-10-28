@@ -1,0 +1,29 @@
+{
+  "name": "ra-de-kiem-tra-ai",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "docx": "^9.1.1",
+    "lucide-react": "^0.468.0",
+    "mammoth": "^1.13.0",
+    "next": "^15.1.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "^5.7.0"
+  }
+}
