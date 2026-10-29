@@ -116,20 +116,23 @@ button:focus-visible {
   }
 }
 
-/* Print Stylesheet for A4 Exam Paper */
+/* Print Stylesheet for A4 Exam Paper (Chuẩn thể thức Nghị định 30/2020/NĐ-CP) */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0;
+    margin: 0; /* XÓA BỎ HOÀN TOÀN ngày giờ, localhost:3001, title và số trang mặc định của Chrome/Edge */
   }
 
-  body {
+  html, body {
     background: #ffffff !important;
     color: #000000 !important;
     font-size: 13pt !important;
     font-family: 'Times New Roman', Times, serif !important;
-    padding: 18mm 20mm !important;
+    line-height: 1.35 !important;
+    padding: 12mm 15mm 12mm 20mm !important; /* Chuẩn thể thức văn bản hành chính Việt Nam: Trái 20mm, Phải 15mm, Trên 12mm, Dưới 12mm */
     margin: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .no-print,
@@ -149,6 +152,7 @@ button:focus-visible {
   .main-layout {
     display: block !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
 
   .exam-preview-container {
@@ -157,20 +161,30 @@ button:focus-visible {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
 
   .question-item {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     border: none !important;
     box-shadow: none !important;
     padding: 4px 0 !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   .exam-header-print {
-    margin-bottom: 16px;
-    border-bottom: 1px solid #000;
+    margin-bottom: 14px;
+    border-bottom: 1.5px solid #000;
     padding-bottom: 8px;
   }
 }

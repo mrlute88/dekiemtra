@@ -40,6 +40,7 @@ export interface Question {
   id: string;
   subject?: string;
   grade?: string;
+  chapter?: string;
   topic?: string;
   subtopic?: string;
   questionType: QuestionType;
@@ -62,26 +63,58 @@ export interface MatrixCell {
   score: number;
   percentage: number;
   questionTypes: string[];
+  tnkqCount?: number;
+  tnkqScore?: number;
+  tlCount?: number;
+  tlScore?: number;
 }
 
 export interface MatrixRow {
+  chapter?: string;
   topic: string;
   subtopic?: string;
   cells: Record<CognitiveLevel, MatrixCell>;
   totalQuestions: number;
   totalScore: number;
   percentage: number;
+  tnkqCount?: number;
+  tnkqScore?: number;
+  tlCount?: number;
+  tlScore?: number;
 }
 
 export interface ExamMatrix {
   rows: MatrixRow[];
-  totalByLevel: Record<CognitiveLevel, { count: number; score: number; percentage: number }>;
+  totalByLevel: Record<CognitiveLevel, { 
+    count: number; 
+    score: number; 
+    percentage: number;
+    tnkqCount?: number;
+    tnkqScore?: number;
+    tlCount?: number;
+    tlScore?: number;
+  }>;
+  summary?: {
+    totalTnkqCount: number;
+    totalTnkqScore: number;
+    totalTnkqPercentage: number;
+    totalTlCount: number;
+    totalTlScore: number;
+    totalTlPercentage: number;
+    knowUnderstandCount: number;
+    knowUnderstandScore: number;
+    knowUnderstandPercentage: number;
+    applyCount: number;
+    applyScore: number;
+    applyPercentage: number;
+  };
   grandTotalQuestions: number;
   grandTotalScore: number;
 }
 
 export interface SpecificationItem {
   id: string;
+  chapter?: string;
   topic: string;
   knowledgeUnit: string; // Đơn vị kiến thức
   learningOutcome: string; // Yêu cầu cần đạt
@@ -89,6 +122,27 @@ export interface SpecificationItem {
   questionType: QuestionType;
   questionCount: number;
   scorePerQuestion: number;
+  totalScore: number;
+  questionIndices?: number[];
+  isTnkq?: boolean;
+}
+
+export interface SpecificationRow {
+  id: string;
+  chapter: string; // Tên chương / Chủ đề
+  knowledgeUnit: string; // Tên nội dung / Đơn vị kiến thức
+  outcomesByLevel: Record<CognitiveLevel, string[]>;
+  questionsByLevel: Record<CognitiveLevel, {
+    count: number;
+    tnkqCount: number;
+    tnkqScore: number;
+    tlCount: number;
+    tlScore: number;
+    score: number;
+    questionIndices: number[];
+    summaryText: string;
+  }>;
+  totalQuestions: number;
   totalScore: number;
 }
 
@@ -148,6 +202,7 @@ export interface GeneratedExamPackage {
   config: ExamConfig;
   matrix: ExamMatrix;
   specification: SpecificationItem[];
+  specificationRows?: SpecificationRow[];
   questions: Question[]; // Base question list (Mã đề 101)
   variantCodes: Record<string, { code: string; questions: Question[] }>; // 101, 102, 103, 104
   gradingGuide: {

@@ -1,5 +1,5 @@
 import { ApiSettings, CognitiveLevel, ExamConfig, GeneratedExamPackage, Question, QuestionType } from '@/types/exam';
-import { buildMatrixFromQuestions, buildSpecificationFromQuestions, distributeScores } from './matrixCalculator';
+import { buildMatrixFromQuestions, buildSpecificationFromQuestions, buildSpecificationRowsFromQuestions, calculateLevelCounts, distributeScores, isObjectiveQuestion } from './matrixCalculator';
 import { generateVariantCodes } from './examShuffler';
 import { getSamplePackage, SAMPLE_QUESTIONS_TOAN_6 } from './sampleData';
 
@@ -125,6 +125,73 @@ Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm lời d�
 /**
  * Execute AI generation via Gemini or OpenAI or fallback
  */
+/**
+ * Chuẩn hóa mức độ nhận thức của câu hỏi khớp 100% với cấu hình người dùng thiết lập
+ */
+export function applyConfigLevelsToQuestions(questions: Question[], config: ExamConfig): Question[] {
+  if (!questions || questions.length === 0) return questions;
+  const targetCounts = calculateLevelCounts(questions.length, config);
+
+  const objIndices: number[] = [];
+  const essayIndices: number[] = [];
+  questions.forEach((q, idx) => {
+    if (isObjectiveQuestion(q.questionType)) {
+      objIndices.push(idx);
+    } else {
+      essayIndices.push(idx);
+    }
+  });
+
+  const assignedLevels: Record<number, CognitiveLevel> = {};
+
+  let nbNeeded = targetCounts.nhan_biet;
+  let thNeeded = targetCounts.thong_hieu;
+  let vdNeeded = targetCounts.van_dung;
+  let vdcNeeded = targetCounts.van_dung_cao;
+
+  // 1. Phân bổ cho câu tự luận từ mức cao (VDC -> VD -> TH -> NB)
+  const essayReversed = [...essayIndices].reverse();
+  for (const idx of essayReversed) {
+    if (vdcNeeded > 0) {
+      assignedLevels[idx] = 'van_dung_cao';
+      vdcNeeded--;
+    } else if (vdNeeded > 0) {
+      assignedLevels[idx] = 'van_dung';
+      vdNeeded--;
+    } else if (thNeeded > 0) {
+      assignedLevels[idx] = 'thong_hieu';
+      thNeeded--;
+    } else {
+      assignedLevels[idx] = 'nhan_biet';
+      nbNeeded--;
+    }
+  }
+
+  // 2. Phân bổ cho câu TNKQ từ mức cơ bản (NB -> TH -> VD -> VDC)
+  for (const idx of objIndices) {
+    if (nbNeeded > 0) {
+      assignedLevels[idx] = 'nhan_biet';
+      nbNeeded--;
+    } else if (thNeeded > 0) {
+      assignedLevels[idx] = 'thong_hieu';
+      thNeeded--;
+    } else if (vdNeeded > 0) {
+      assignedLevels[idx] = 'van_dung';
+      vdNeeded--;
+    } else if (vdcNeeded > 0) {
+      assignedLevels[idx] = 'van_dung_cao';
+      vdcNeeded--;
+    } else {
+      assignedLevels[idx] = 'nhan_biet';
+    }
+  }
+
+  return questions.map((q, idx) => ({
+    ...q,
+    level: assignedLevels[idx] || q.level,
+  }));
+}
+
 export async function generateExamWithAI(
   config: ExamConfig,
   apiSettings: ApiSettings,
@@ -298,24 +365,39 @@ export async function generateExamWithAI(
   }
 
   onProgress?.('Đang phân bổ thang điểm & chuẩn hóa ma trận câu hỏi...');
-  questions = distributeScores(questions, config.maxScore);
+  questions = applyConfigLevelsToQuestions(questions, config);
+  questions = distributeScores(questions, config.maxScore, config);
 
   onProgress?.('Đang kiểm tra tính toán & rà soát phương án nhiễu...');
   await new Promise(r => setTimeout(r, 500));
 
   onProgress?.('Đang khởi tạo các mã đề hoán vị & bản đặc tả...');
-  const matrix = buildMatrixFromQuestions(questions, config.maxScore);
-  const specification = buildSpecificationFromQuestions(questions);
+  const matrix = buildMatrixFromQuestions(questions, config.maxScore, config.chapter || config.topic);
+  const specification = buildSpecificationFromQuestions(questions, config.chapter || config.topic);
+  const specificationRows = buildSpecificationRowsFromQuestions(questions, config.chapter || config.topic);
   const variantCodes = generateVariantCodes(questions, config.numberOfCodes || 4);
 
-  const essayQuestions = questions.filter(q => q.rubricBreakdown && q.rubricBreakdown.length > 0);
-  const rubrics = essayQuestions.map(q => ({
-    questionId: q.id,
-    questionTitle: `${q.id}: ${q.subtopic || q.topic}`,
-    learningOutcome: q.learningOutcome || 'Chuẩn kiến thức kĩ năng GDPT 2018',
-    breakdown: q.rubricBreakdown || [],
-    totalScore: q.score || 1.0,
-  }));
+  const essayQuestions = questions.filter(q => (q.rubricBreakdown && q.rubricBreakdown.length > 0) || !isObjectiveQuestion(q.questionType));
+  const rubrics = essayQuestions.map(q => {
+    const qIndex = questions.findIndex(item => item.id === q.id);
+    const qNum = qIndex >= 0 ? qIndex + 1 : (q.id.replace(/\D/g, '') || '1');
+    const qTitle = `Câu ${qNum}: ${q.subtopic || q.topic || 'Câu hỏi tự luận'}`;
+    const defaultHalf = Number(((q.score || 1) * 0.5).toFixed(2));
+    const breakdown = (q.rubricBreakdown && q.rubricBreakdown.length > 0)
+      ? q.rubricBreakdown
+      : [
+          { criteria: 'Nêu đúng phương pháp và hướng giải quyết', score: defaultHalf },
+          { criteria: 'Trình bày logic và tính toán ra kết quả chính xác', score: Number(((q.score || 1) - defaultHalf).toFixed(2)) },
+        ];
+
+    return {
+      questionId: q.id,
+      questionTitle: qTitle,
+      learningOutcome: q.learningOutcome || 'Chuẩn kiến thức kĩ năng GDPT 2018',
+      breakdown,
+      totalScore: q.score || 1.0,
+    };
+  });
 
   const qualityAudit = runQualityAudit(questions, matrix, config);
 
@@ -325,6 +407,7 @@ export async function generateExamWithAI(
     config,
     matrix,
     specification,
+    specificationRows,
     questions,
     variantCodes,
     gradingGuide: {

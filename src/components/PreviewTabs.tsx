@@ -25,7 +25,8 @@ import {
 import { ExamConfig, GeneratedExamPackage, Question, QuestionBankItem } from '@/types/exam';
 import { MatrixTable } from './MatrixTable';
 import { SpecificationTable } from './SpecificationTable';
-import { exportAnswerKeyToWord, exportExamToWord } from '@/lib/docxExporter';
+import { exportAnswerKeyToWord, exportExamToWord, exportMatrixAndSpecToWord } from '@/lib/docxExporter';
+import { exportMatrixAndSpecToPdf, downloadMatrixAndSpecPdf } from '@/lib/pdfExporter';
 import { formatExamTitle, LEVEL_NAMES } from '@/lib/matrixCalculator';
 
 interface PreviewTabsProps {
@@ -57,6 +58,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
   const [savedNotification, setSavedNotification] = useState(false);
   const [isHeaderConfigOpen, setIsHeaderConfigOpen] = useState(false);
   const [wordFontSize, setWordFontSize] = useState<13 | 14>(13);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   if (!examPackage) {
     return (
@@ -97,7 +99,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
 
   // Copy text to clipboard
   const handleCopyExamText = () => {
-    let text = `${config.schoolName || 'TRƯỜNG THCS NGUYỄN DU'}\n${formatExamTitle(config.examTitle)} - MÃ ĐỀ: ${currentVariant.code}\n`;
+    let text = `${config.schoolName || 'TRƯỜNG TH NGỌC TỐ'}\n${formatExamTitle(config.examTitle)} - MÃ ĐỀ: ${currentVariant.code}\n`;
     text += `Môn: ${config.subject} - ${config.grade} | Thời gian: ${config.durationMinutes} phút\n\n`;
     questions.forEach((q, idx) => {
       const cleanQ = q.question.replace(/^\[(Nhận biết|Thông hiểu|Vận dụng cao|Vận dụng|NB|TH|VD|VDC)\]\s*:?\s*/i, '').trim();
@@ -117,6 +119,15 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
   };
 
   const handlePrint = () => {
+    if (!examPackage) return;
+    if (activeTab === 'ma_tran') {
+      exportMatrixAndSpecToPdf(examPackage, 'matrix');
+      return;
+    }
+    if (activeTab === 'ban_dac_ta') {
+      exportMatrixAndSpecToPdf(examPackage, 'spec');
+      return;
+    }
     const originalTitle = document.title;
     document.title = '';
     window.print();
@@ -284,7 +295,21 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
 
           <button
             type="button"
-            onClick={() => exportExamToWord(examPackage, selectedCode, wordFontSize)}
+            disabled={isDownloadingPdf}
+            onClick={async () => {
+              if (activeTab === 'ma_tran' || activeTab === 'ban_dac_ta') {
+                setIsDownloadingPdf(true);
+                try {
+                  await downloadMatrixAndSpecPdf(examPackage);
+                } finally {
+                  setIsDownloadingPdf(false);
+                }
+              } else if (activeTab === 'dap_an' || activeTab === 'huong_dan_cham') {
+                exportAnswerKeyToWord(examPackage, selectedCode, wordFontSize);
+              } else {
+                exportExamToWord(examPackage, selectedCode, wordFontSize);
+              }
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -296,11 +321,25 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
               color: '#ffffff',
               fontSize: '0.76rem',
               fontWeight: 700,
-              cursor: 'pointer',
+              cursor: isDownloadingPdf ? 'wait' : 'pointer',
+              opacity: isDownloadingPdf ? 0.75 : 1,
             }}
+            title={
+              activeTab === 'ma_tran' || activeTab === 'ban_dac_ta'
+                ? 'Tải file PDF Khung Ma trận và Bản đặc tả về máy tính'
+                : activeTab === 'dap_an' || activeTab === 'huong_dan_cham'
+                ? 'Xuất file Word Đáp án & Hướng dẫn chấm'
+                : 'Xuất file Word Đề thi'
+            }
           >
             <Download size={14} />
-            <span>Xuất Word ({wordFontSize}pt)</span>
+            <span>
+              {activeTab === 'ma_tran' || activeTab === 'ban_dac_ta'
+                ? (isDownloadingPdf ? 'Đang tải PDF...' : 'Xuất PDF Ma trận & Đặc tả')
+                : activeTab === 'dap_an' || activeTab === 'huong_dan_cham'
+                ? `Xuất Word Đáp án (${wordFontSize}pt)`
+                : `Xuất Word (${wordFontSize}pt)`}
+            </span>
           </button>
 
           <button
@@ -415,7 +454,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
                       type="text"
                       value={config.schoolName || ''}
                       onChange={(e) => onUpdateExamConfig?.({ schoolName: e.target.value })}
-                      placeholder="Ví dụ: TRƯỜNG THCS NGUYỄN DU"
+                      placeholder="Ví dụ: TRƯỜNG TH NGỌC TỐ"
                       style={{
                         width: '100%',
                         padding: '6px 10px',
@@ -539,7 +578,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
               {/* Left Header */}
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase' }}>
-                  {config.schoolName || 'TRƯỜNG THCS NGUYỄN DU'}
+                  {config.schoolName || 'TRƯỜNG TH NGỌC TỐ'}
                 </div>
                 {config.subHeader && config.subHeader.trim() !== '' && (
                   <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
@@ -574,14 +613,36 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
               justifyContent: 'space-between',
               fontSize: '0.85rem',
               color: '#334155',
-              paddingBottom: 14,
+              paddingBottom: 10,
               borderBottom: '1px dashed #cbd5e1',
-              marginBottom: 20,
+              marginBottom: 14,
               fontStyle: 'italic',
             }}>
               <span>Họ và tên học sinh: ............................................................................</span>
               <span>Lớp: ....................</span>
               <span>SBD: ....................</span>
+            </div>
+
+            {/* Score & Teacher Feedback Box (Chuẩn khảo thí GDPT 2018 khi in bài thi) */}
+            <div className="print-only" style={{ display: 'none', marginBottom: 16 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: '35%', border: '1px solid #000', padding: '6px 8px', textAlign: 'center', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'uppercase' }}>Điểm bài kiểm tra</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: 6, fontSize: '0.8rem', color: '#475569' }}>
+                        <span>Bằng số: ..........</span>
+                        <span>Bằng chữ: ..........</span>
+                      </div>
+                      <div style={{ height: 32 }}></div>
+                    </td>
+                    <td style={{ width: '65%', border: '1px solid #000', padding: '6px 10px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', textTransform: 'uppercase' }}>Lời nhận xét của giáo viên</div>
+                      <div style={{ height: 42 }}></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             {/* Questions List */}
@@ -758,6 +819,16 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
               ))}
             </div>
 
+            {/* Dòng kết thúc bài thi chuẩn Bộ GD&ĐT (Chỉ hiển thị khi in) */}
+            <div className="print-only" style={{ display: 'none', textAlign: 'center', marginTop: 24, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', letterSpacing: 2, color: '#1e293b' }}>
+                ---------- HẾT ----------
+              </div>
+              <div style={{ fontStyle: 'italic', fontSize: '0.82rem', color: '#64748b', marginTop: 4 }}>
+                (Cán bộ coi thi không giải thích gì thêm)
+              </div>
+            </div>
+
             {/* Bottom Add Question Button (no-print) */}
             <div className="no-print" style={{ marginTop: 20, textAlign: 'center' }}>
               <button
@@ -887,7 +958,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e3a8a' }}>
-                      {rb.questionTitle}
+                      {rb.questionTitle.replace(/^[Qq](\d+)\s*[:.]?\s*/, 'Câu $1: ')}
                     </div>
                     <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#15803d', backgroundColor: '#f0fdf4', padding: '2px 8px', borderRadius: 6 }}>
                       Tổng: {rb.totalScore} điểm
@@ -932,7 +1003,14 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
 
         {/* ================= TAB 5: BẢN ĐẶC TẢ ================= */}
         {activeTab === 'ban_dac_ta' && (
-          <SpecificationTable specifications={examPackage.specification} />
+          <SpecificationTable 
+            specifications={examPackage.specification} 
+            specificationRows={examPackage.specificationRows}
+            questions={questions}
+            subject={config.subject}
+            grade={config.grade}
+            matrix={examPackage.matrix}
+          />
         )}
       </div>
     </div>

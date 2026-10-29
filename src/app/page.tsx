@@ -15,6 +15,7 @@ import { ChatbotAssistant } from '@/components/ChatbotAssistant';
 
 import { ApiSettings, ExamConfig, GeneratedExamPackage, Question, QuestionBankItem } from '@/types/exam';
 import { 
+  DEFAULT_CONFIG_TIEUHOC_TINHOC_4,
   DEFAULT_CONFIG_THCS_TOAN, 
   getSamplePackage, 
   GRADES_BY_LEVEL, 
@@ -34,7 +35,7 @@ import {
   saveQuestionToBank 
 } from '@/lib/storage';
 import { generateExamWithAI, runQualityAudit } from '@/lib/aiService';
-import { buildMatrixFromQuestions, buildSpecificationFromQuestions, distributeScores } from '@/lib/matrixCalculator';
+import { buildMatrixFromQuestions, buildSpecificationFromQuestions, buildSpecificationRowsFromQuestions, distributeScores } from '@/lib/matrixCalculator';
 import { generateVariantCodes } from '@/lib/examShuffler';
 
 export default function Home() {
@@ -44,7 +45,7 @@ export default function Home() {
     apiKey: '',
     model: 'gemini-3.8-flash',
   });
-  const [config, setConfig] = useState<ExamConfig>(DEFAULT_CONFIG_THCS_TOAN);
+  const [config, setConfig] = useState<ExamConfig>(DEFAULT_CONFIG_TIEUHOC_TINHOC_4);
   const [examPackage, setExamPackage] = useState<GeneratedExamPackage | null>(null);
 
   // Loading & Progress
@@ -68,13 +69,21 @@ export default function Home() {
     const savedSettings = getApiSettings();
     setApiSettings(savedSettings);
 
-    const lastCfg = getLastConfig();
-    if (lastCfg) {
-      setConfig(lastCfg);
-      setExamPackage(getSamplePackage(lastCfg));
-    } else {
-      setExamPackage(getSamplePackage(DEFAULT_CONFIG_THCS_TOAN));
-    }
+    // Mặc định luôn tải đề kiểm tra môn Tin học 4 theo chuẩn file De_kiem_tra_Tin học_Lop_4.docx
+    // Thông tin trường, cơ quan chủ quản (UBND XÃ NGỌC TỐ), năm học 2026 - 2027
+    // Xóa bỏ nội dung trong 2 ô ghi chú & nội dung bài học khi load trang
+    const initialConfig: ExamConfig = {
+      ...DEFAULT_CONFIG_TIEUHOC_TINHOC_4,
+      schoolName: 'TRƯỜNG TH NGỌC TỐ',
+      subHeader: 'UBND XÃ NGỌC TỐ',
+      academicYear: '2026 - 2027',
+      teacherNotes: '',
+      lessonContentText: '',
+    };
+
+    setConfig(initialConfig);
+    setExamPackage(getSamplePackage(initialConfig));
+    saveLastConfig(initialConfig);
 
     setBankItems(getQuestionBank());
     setSavedExamsList(getSavedExams());
@@ -88,15 +97,17 @@ export default function Home() {
 
     if (examPackage) {
       if (maxScoreChanged && examPackage.questions.length > 0) {
-        const distributed = distributeScores(examPackage.questions, newConfig.maxScore);
-        const matrix = buildMatrixFromQuestions(distributed, newConfig.maxScore);
-        const specification = buildSpecificationFromQuestions(distributed);
+        const distributed = distributeScores(examPackage.questions, newConfig.maxScore, newConfig);
+        const matrix = buildMatrixFromQuestions(distributed, newConfig.maxScore, newConfig.chapter || newConfig.topic);
+        const specification = buildSpecificationFromQuestions(distributed, newConfig.chapter || newConfig.topic);
+        const specificationRows = buildSpecificationRowsFromQuestions(distributed, newConfig.chapter || newConfig.topic);
         setExamPackage({
           ...examPackage,
           config: newConfig,
           questions: distributed,
           matrix,
           specification,
+          specificationRows,
         });
       } else {
         setExamPackage({
@@ -113,15 +124,17 @@ export default function Home() {
     saveLastConfig(newConfig);
     if (examPackage) {
       if (updatedFields.maxScore && updatedFields.maxScore !== examPackage.config.maxScore && examPackage.questions.length > 0) {
-        const distributed = distributeScores(examPackage.questions, newConfig.maxScore);
-        const matrix = buildMatrixFromQuestions(distributed, newConfig.maxScore);
-        const specification = buildSpecificationFromQuestions(distributed);
+        const distributed = distributeScores(examPackage.questions, newConfig.maxScore, newConfig);
+        const matrix = buildMatrixFromQuestions(distributed, newConfig.maxScore, newConfig.chapter || newConfig.topic);
+        const specification = buildSpecificationFromQuestions(distributed, newConfig.chapter || newConfig.topic);
+        const specificationRows = buildSpecificationRowsFromQuestions(distributed, newConfig.chapter || newConfig.topic);
         setExamPackage({
           ...examPackage,
           config: newConfig,
           questions: distributed,
           matrix,
           specification,
+          specificationRows,
         });
       } else {
         setExamPackage({
@@ -162,14 +175,16 @@ export default function Home() {
   // Matrix generation only
   const handleGenerateMatrixOnly = () => {
     if (!examPackage) return;
-    const questions = distributeScores(examPackage.questions, config.maxScore);
-    const matrix = buildMatrixFromQuestions(questions, config.maxScore);
-    const specification = buildSpecificationFromQuestions(questions);
+    const questions = distributeScores(examPackage.questions, config.maxScore, config);
+    const matrix = buildMatrixFromQuestions(questions, config.maxScore, config.chapter || config.topic);
+    const specification = buildSpecificationFromQuestions(questions, config.chapter || config.topic);
+    const specificationRows = buildSpecificationRowsFromQuestions(questions, config.chapter || config.topic);
     setExamPackage({
       ...examPackage,
       questions,
       matrix,
       specification,
+      specificationRows,
     });
   };
 
@@ -263,9 +278,10 @@ export default function Home() {
   const handleDeleteQuestion = (qId: string) => {
     if (!examPackage) return;
     const updated = examPackage.questions.filter((q) => q.id !== qId);
-    const distributed = distributeScores(updated, config.maxScore);
-    const matrix = buildMatrixFromQuestions(distributed, config.maxScore);
-    const specification = buildSpecificationFromQuestions(distributed);
+    const distributed = distributeScores(updated, config.maxScore, config);
+    const matrix = buildMatrixFromQuestions(distributed, config.maxScore, config.chapter || config.topic);
+    const specification = buildSpecificationFromQuestions(distributed, config.chapter || config.topic);
+    const specificationRows = buildSpecificationRowsFromQuestions(distributed, config.chapter || config.topic);
     const variantCodes = generateVariantCodes(distributed, config.numberOfCodes);
     const qualityAudit = runQualityAudit(distributed, matrix, config);
 
@@ -274,6 +290,7 @@ export default function Home() {
       questions: distributed,
       matrix,
       specification,
+      specificationRows,
       variantCodes,
       qualityAudit,
     });
@@ -285,9 +302,10 @@ export default function Home() {
     const updatedList = exists
       ? examPackage.questions.map((q) => (q.id === updatedQ.id ? updatedQ : q))
       : [...examPackage.questions, updatedQ];
-    const distributed = exists ? updatedList : distributeScores(updatedList, config.maxScore);
-    const matrix = buildMatrixFromQuestions(distributed, config.maxScore);
-    const specification = buildSpecificationFromQuestions(distributed);
+    const distributed = exists ? updatedList : distributeScores(updatedList, config.maxScore, config);
+    const matrix = buildMatrixFromQuestions(distributed, config.maxScore, config.chapter || config.topic);
+    const specification = buildSpecificationFromQuestions(distributed, config.chapter || config.topic);
+    const specificationRows = buildSpecificationRowsFromQuestions(distributed, config.chapter || config.topic);
     const variantCodes = generateVariantCodes(distributed, config.numberOfCodes);
     const qualityAudit = runQualityAudit(distributed, matrix, config);
 
@@ -296,6 +314,7 @@ export default function Home() {
       questions: distributed,
       matrix,
       specification,
+      specificationRows,
       variantCodes,
       qualityAudit,
     });
@@ -369,9 +388,10 @@ export default function Home() {
       isTeacherProvided: true,
     };
     const updatedList = [...examPackage.questions, inserted];
-    const distributed = distributeScores(updatedList, config.maxScore);
-    const matrix = buildMatrixFromQuestions(distributed, config.maxScore);
-    const specification = buildSpecificationFromQuestions(distributed);
+    const distributed = distributeScores(updatedList, config.maxScore, config);
+    const matrix = buildMatrixFromQuestions(distributed, config.maxScore, config.chapter || config.topic);
+    const specification = buildSpecificationFromQuestions(distributed, config.chapter || config.topic);
+    const specificationRows = buildSpecificationRowsFromQuestions(distributed, config.chapter || config.topic);
     const variantCodes = generateVariantCodes(distributed, config.numberOfCodes);
     const qualityAudit = runQualityAudit(distributed, matrix, config);
 
@@ -380,6 +400,7 @@ export default function Home() {
       questions: distributed,
       matrix,
       specification,
+      specificationRows,
       variantCodes,
       qualityAudit,
     });
@@ -413,8 +434,16 @@ export default function Home() {
   const handleRestoreLastConfig = () => {
     const last = getLastConfig();
     if (last) {
-      setConfig(last);
-      setExamPackage(getSamplePackage(last));
+      const cleanedLast: ExamConfig = {
+        ...last,
+        schoolName: (!last.schoolName || last.schoolName === 'TRƯỜNG THCS NGUYỄN DU')
+          ? 'TRƯỜNG TH NGỌC TỐ'
+          : last.schoolName,
+        teacherNotes: '',
+        lessonContentText: '',
+      };
+      setConfig(cleanedLast);
+      setExamPackage(getSamplePackage(cleanedLast));
       alert('Đã khôi phục cấu hình đề gần nhất!');
     } else {
       alert('Chưa có cấu hình nào được lưu trước đó.');

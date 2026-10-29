@@ -789,7 +789,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                     type="text"
                     value={config.schoolName || ''}
                     onChange={(e) => update({ schoolName: e.target.value })}
-                    placeholder="Ví dụ: TRƯỜNG THCS NGUYỄN DU"
+                    placeholder="Ví dụ: TRƯỜNG TH NGỌC TỐ"
                     style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                   />
                 </div>
