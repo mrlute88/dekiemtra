@@ -186,6 +186,36 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     setExtractError('');
     setExtractSuccess('');
 
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+
+    // Fast-path: Đọc trực tiếp tệp văn bản thuần ngay trong trình duyệt (0ms, không phụ thuộc server)
+    if (['txt', 'md', 'csv', 'json'].includes(ext)) {
+      try {
+        const text = await file.text();
+        const cleaned = text.replace(/\r\n/g, '\n').trim();
+        if (cleaned.length < 5) {
+          throw new Error('Tệp không có nội dung văn bản hợp lệ.');
+        }
+        update({
+          uploadedFileName: file.name,
+          uploadedFilesText: cleaned,
+        });
+        setExtractSuccess(`Đã nạp thành công ${cleaned.length.toLocaleString()} ký tự từ "${file.name}"`);
+      } catch (readErr: any) {
+        setExtractError(readErr.message || 'Lỗi đọc tệp văn bản.');
+      } finally {
+        setIsExtracting(false);
+      }
+      return;
+    }
+
+    // Kiểm tra kích thước tệp đối với PDF/Word để tránh vượt giới hạn payload
+    if (file.size > 10 * 1024 * 1024) {
+      setExtractError('Tệp quá lớn (> 10MB). Vui lòng chọn tệp tài liệu nhỏ hơn hoặc dán trực tiếp nội dung bài học vào Bước 4.');
+      setIsExtracting(false);
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -196,8 +226,18 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       });
 
       if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson?.error || `Lỗi trích xuất (HTTP ${res.status})`);
+        let errMsg = `Lỗi trích xuất (HTTP ${res.status})`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error) errMsg = errJson.error;
+        } catch {
+          if (res.status === 413) {
+            errMsg = 'Tệp quá lớn so với giới hạn truyền tải của máy chủ. Vui lòng chọn tệp nhỏ hơn 4.5MB.';
+          } else if (res.status === 500) {
+            errMsg = 'Máy chủ không thể xử lý định dạng tệp này (có thể là tệp PDF scan ảnh thuần túy hoặc bị lỗi font).';
+          }
+        }
+        throw new Error(errMsg);
       }
 
       const data = await res.json();
@@ -208,21 +248,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       setExtractSuccess(`Đã trích xuất thành công ${data.charCount.toLocaleString()} ký tự từ "${file.name}"`);
     } catch (err: any) {
       console.error('File extraction failed:', err);
-      // Client-side fallback for plain text files
-      if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const text = event.target?.result as string;
-          update({
-            uploadedFileName: file.name,
-            uploadedFilesText: text,
-          });
-          setExtractSuccess(`Đã đọc ${text.length.toLocaleString()} ký tự từ "${file.name}"`);
-        };
-        reader.readAsText(file);
-      } else {
-        setExtractError(err.message || 'Không thể trích xuất nội dung văn bản từ tệp này.');
-      }
+      setExtractError(err.message || 'Không thể trích xuất nội dung văn bản từ tệp này.');
     } finally {
       setIsExtracting(false);
     }
