@@ -13,3 +13,6 @@ fix-agent.bat
 *.log
 KHBD Nop Nha Truong Duyet/
 tai lieu/
+
+.vercel
+.env*
