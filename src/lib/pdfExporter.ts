@@ -726,6 +726,17 @@ async function exportWithClientSideHtml2Pdf(
   }
 }
 
+function sanitizeFilename(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
 /**
  * TẢI TRỰC TIẾP FILE PDF VỀ MÁY TÍNH (KHÔNG MỞ TRANG IN)
  * Hoạt động mượt mà 100% trên cả bản Online (Vercel Serverless) lẫn Local máy tính
@@ -734,8 +745,8 @@ export async function downloadMatrixAndSpecPdf(
   pkg: GeneratedExamPackage,
   targetSection: 'all' | 'matrix' | 'spec' = 'all'
 ): Promise<void> {
-  const subjectClean = (pkg.config.subject || 'Tin_hoc').replace(/\s+/g, '_');
-  const gradeClean = (pkg.config.grade || 'Lop_4').replace(/\s+/g, '_');
+  const subjectClean = sanitizeFilename(pkg.config.subject || 'Tin_hoc');
+  const gradeClean = sanitizeFilename(pkg.config.grade || 'Lop_4');
   const filename = `Ma_tran_va_Ban_dac_ta_${subjectClean}_${gradeClean}.pdf`;
 
   // 1. Nếu đang chạy ở môi trường localhost/local dev, thử gọi qua API server trước (nhanh và chuẩn native PDF)
