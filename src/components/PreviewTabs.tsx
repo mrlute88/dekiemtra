@@ -335,7 +335,7 @@ export const PreviewTabs: React.FC<PreviewTabsProps> = ({
             <Download size={14} />
             <span>
               {activeTab === 'ma_tran' || activeTab === 'ban_dac_ta'
-                ? (isDownloadingPdf ? 'Đang tải PDF...' : 'Xuất PDF Ma trận & Đặc tả')
+                ? (isDownloadingPdf ? 'Đang tạo & tải PDF...' : 'Xuất PDF Ma trận & Đặc tả')
                 : activeTab === 'dap_an' || activeTab === 'huong_dan_cham'
                 ? `Xuất Word Đáp án (${wordFontSize}pt)`
                 : `Xuất Word (${wordFontSize}pt)`}

@@ -646,48 +646,146 @@ export function exportMatrixAndSpecToPdf(
 }
 
 /**
- * TẢI TRỰC TIẾP FILE PDF VỀ MÁY TÍNH (KHÔNG MỞ TRANG IN)
- * Dùng cho nút "Xuất PDF Ma trận & Đặc tả"
+ * TẠO VÀ TẢI TRỰC TIẾP FILE PDF BẰNG HTML2PDF NGAY TRÊN TRÌNH DUYỆT (CLIENT-SIDE)
+ * Đảm bảo 100% hoạt động độc lập không cần máy chủ Chrome (hoàn hảo cho Vercel / Cloud / Máy khách)
  */
-export async function downloadMatrixAndSpecPdf(pkg: GeneratedExamPackage): Promise<void> {
+async function exportWithClientSideHtml2Pdf(
+  pkg: GeneratedExamPackage,
+  filename: string,
+  targetSection: 'all' | 'matrix' | 'spec' = 'all'
+): Promise<void> {
+  const html2pdf = (await import('html2pdf.js')).default;
+  const htmlContent = generateMatrixAndSpecHtml(pkg, targetSection, false);
+
+  // 1. Tạo phần tử wrapper ẩn ngoài màn hình nhưng nằm trong DOM chính để thừa hưởng font và styles
+  const wrapper = document.createElement('div');
+  wrapper.id = 'pdf-export-wrapper';
+  wrapper.style.position = 'absolute';
+  wrapper.style.top = '0';
+  wrapper.style.left = '0';
+  wrapper.style.width = '297mm';
+  wrapper.style.background = '#ffffff';
+  wrapper.style.zIndex = '-9999';
+  wrapper.style.pointerEvents = 'none';
+
+  // Phân tích HTML để lấy <style> và các khối .sheet
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+
+  // Trích xuất các thẻ <style>
+  const styles = doc.querySelectorAll('style');
+  styles.forEach((st) => wrapper.appendChild(st.cloneNode(true)));
+
+  // Trích xuất các khối trang .sheet
+  const sheets = doc.querySelectorAll('.sheet');
+  const container = document.createElement('div');
+  container.style.width = '297mm';
+  container.style.margin = '0 auto';
+  container.style.background = '#ffffff';
+
+  sheets.forEach((sheet, idx) => {
+    const clone = sheet.cloneNode(true) as HTMLElement;
+    clone.style.margin = '0';
+    clone.style.width = '297mm';
+    clone.style.boxSizing = 'border-box';
+    if (idx < sheets.length - 1) {
+      clone.classList.add('html2pdf__page-break');
+    }
+    container.appendChild(clone);
+  });
+
+  wrapper.appendChild(container);
+  document.body.appendChild(wrapper);
+
+  // Đợi DOM cập nhật và render font
+  await new Promise((resolve) => setTimeout(resolve, 350));
+
+  const opt = {
+    margin: 0,
+    filename: filename,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      letterRendering: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: 1200,
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' as const },
+    pagebreak: { mode: ['css', 'legacy'], after: '.html2pdf__page-break' },
+  };
+
+  try {
+    // @ts-ignore
+    await html2pdf().from(container).set(opt).save();
+  } finally {
+    if (document.body.contains(wrapper)) {
+      document.body.removeChild(wrapper);
+    }
+  }
+}
+
+/**
+ * TẢI TRỰC TIẾP FILE PDF VỀ MÁY TÍNH (KHÔNG MỞ TRANG IN)
+ * Hoạt động mượt mà 100% trên cả bản Online (Vercel Serverless) lẫn Local máy tính
+ */
+export async function downloadMatrixAndSpecPdf(
+  pkg: GeneratedExamPackage,
+  targetSection: 'all' | 'matrix' | 'spec' = 'all'
+): Promise<void> {
   const subjectClean = (pkg.config.subject || 'Tin_hoc').replace(/\s+/g, '_');
   const gradeClean = (pkg.config.grade || 'Lop_4').replace(/\s+/g, '_');
   const filename = `Ma_tran_va_Ban_dac_ta_${subjectClean}_${gradeClean}.pdf`;
 
-  const html = generateMatrixAndSpecHtml(pkg, 'all', false);
+  // 1. Nếu đang chạy ở môi trường localhost/local dev, thử gọi qua API server trước (nhanh và chuẩn native PDF)
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  try {
-    const res = await fetch('/api/export-pdf', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        html,
-        filename,
-      }),
-    });
+  if (isLocalhost) {
+    try {
+      const html = generateMatrixAndSpecHtml(pkg, targetSection, false);
+      const res = await fetch('/api/export-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          html,
+          filename,
+        }),
+      });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || `Lỗi máy chủ (${res.status})`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.href = blobUrl;
+        downloadAnchor.download = filename;
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        document.body.removeChild(downloadAnchor);
+        window.URL.revokeObjectURL(blobUrl);
+        return;
+      }
+    } catch {
+      // Nếu API backend không khả dụng, tự động chuyển sang client-side
     }
+  }
 
-    const blob = await res.blob();
-    const blobUrl = window.URL.createObjectURL(blob);
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.href = blobUrl;
-    downloadAnchor.download = filename;
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    document.body.removeChild(downloadAnchor);
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (err: any) {
-    console.error('Lỗi khi tải file PDF trực tiếp:', err);
-    // Nếu gặp sự cố mạng, thông báo và hỗ trợ mở cửa sổ in dự phòng
-    const retryPrint = confirm(`Không thể tải trực tiếp file PDF (${err.message}). Bạn có muốn mở cửa sổ in để lưu PDF thay thế không?`);
+  // 2. Môi trường Online (Vercel / Cloud) hoặc khi server không có sẵn Chrome:
+  // Tự động tạo và tải trực tiếp file PDF chất lượng cao ngay trên trình duyệt máy khách (Client-Side)
+  try {
+    await exportWithClientSideHtml2Pdf(pkg, filename, targetSection);
+  } catch (clientErr: any) {
+    console.error('Lỗi khi tạo PDF client-side:', clientErr);
+    // Nếu cả client-side cũng không hỗ trợ (trình duyệt quá cũ), mở cửa sổ in dự phòng
+    const retryPrint = confirm(
+      'Không thể tải trực tiếp file PDF trên trình duyệt này. Bạn có muốn mở cửa sổ in để lưu PDF thay thế không?'
+    );
     if (retryPrint) {
-      exportMatrixAndSpecToPdf(pkg, 'all');
+      exportMatrixAndSpecToPdf(pkg, targetSection);
     }
   }
 }
